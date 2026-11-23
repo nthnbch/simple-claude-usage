@@ -87,18 +87,30 @@ func resetText(_ d: Date?) -> String {
     return h > 0 ? "resets in \(h)h \(m)m" : "resets in \(m)m"
 }
 
+struct Bar: View {
+    let percent: Double
+    var color: Color { percent >= 90 ? .red : percent >= 70 ? .orange : .green }
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule().fill(color).frame(width: max(6, g.size.width * min(max(percent, 0), 100) / 100))
+            }
+        }.frame(height: 6)
+    }
+}
+
 struct Row: View {
     let title: String; let w: Window?
     var body: some View {
-        let p = w?.percent ?? 0
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title).font(.system(size: 12, weight: .medium))
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.system(size: 12))
                 Spacer()
-                Text(w == nil ? "–" : "\(Int(p.rounded()))%").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                Text(w == nil ? "–" : "\(Int((w?.percent ?? 0).rounded()))%")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
             }
-            ProgressView(value: min(max(p, 0), 100), total: 100)
-                .tint(p >= 90 ? .red : p >= 70 ? .orange : .accentColor)
+            Bar(percent: w?.percent ?? 0)
             Text(resetText(w?.resetsAt)).font(.system(size: 10)).foregroundStyle(.secondary)
         }
     }
@@ -107,63 +119,73 @@ struct Row: View {
 struct ContentView: View {
     @ObservedObject var store: Store
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Claude").font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if let u = store.usage { Text(u.plan).font(.system(size: 11)).foregroundStyle(.secondary) }
+                if let u = store.usage {
+                    Text(u.plan).font(.system(size: 10, weight: .medium))
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.primary.opacity(0.1)))
+                }
             }
             if let u = store.usage {
-                Row(title: "Session (5h)", w: u.fiveHour)
-                Row(title: "Week", w: u.sevenDay)
+                Row(title: "Session · 5h", w: u.fiveHour)
+                Row(title: "Week · 7d", w: u.sevenDay)
+            } else if store.error == nil {
+                Text("Loading…").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             if let e = store.error { Text(e.message).font(.system(size: 11)).foregroundStyle(.red) }
-            HStack {
-                Button("Refresh") { store.refresh() }.buttonStyle(.link)
-                Spacer()
-                Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.link)
-            }.font(.system(size: 11))
         }
-        .padding(14).frame(width: 240)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(width: 250, alignment: .leading)
     }
 }
 
 // MARK: - App
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let store = Store()
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    let popover = NSPopover()
+    let menu = NSMenu()
     var timer: Timer?
+    var menuOpen = false
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: ContentView(store: store))
+        let host = NSHostingView(rootView: ContentView(store: store))
+        host.frame = NSRect(origin: .zero, size: NSSize(width: 250, height: 190))
+        let content = NSMenuItem()
+        content.view = host
+        menu.addItem(content)
+        menu.addItem(.separator())
+        let refresh = NSMenuItem(title: "Refresh", action: #selector(refresh), keyEquivalent: "r")
+        refresh.target = self
+        menu.addItem(refresh)
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.delegate = self
+        item.menu = menu
+
         if let b = item.button {
             b.title = "…"
-            b.image = nil
-            b.target = self
-            b.action = #selector(toggle)
             b.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
         }
-        store.onChange = { [weak self] in self?.updateTitle() }
+        store.onChange = { [weak self] in self?.update() }
         store.refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.store.refresh() }
         }
     }
 
-    @objc func mouseEntered(with e: NSEvent) { if !popover.isShown { show() } }
+    @objc func mouseEntered(with e: NSEvent) { if !menuOpen { item.button?.performClick(nil) } }
+    @objc func refresh() { store.refresh() }
+    func menuWillOpen(_ m: NSMenu) { menuOpen = true; store.refresh() }
+    func menuDidClose(_ m: NSMenu) { menuOpen = false }
 
-    @objc func toggle() { popover.isShown ? popover.performClose(nil) : show() }
-
-    func show() {
-        guard let b = item.button else { return }
-        store.refresh()
-        popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
-    }
-
-    func updateTitle() {
+    func update() {
+        if let h = menu.items.first?.view {
+            let size = h.fittingSize
+            h.setFrameSize(NSSize(width: 250, height: size.height))
+        }
         if let p = store.usage?.fiveHour?.percent { item.button?.title = "\(Int(p.rounded()))%" }
         else { item.button?.title = store.error == nil ? "…" : "!" }
     }
