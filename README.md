@@ -12,6 +12,10 @@ Languages: English, Français, Deutsch, Italiano, Русский, Español (foll
 - One Swift file (~170 lines), no dependencies, no Dock icon.
 - Refreshes every 2 minutes.
 
+## Prerequisite: Claude Code must be installed
+
+This app has no login of its own. It reuses the session of **Claude Code** (the `claude` command-line tool), so Claude Code must be installed and logged in at least once (`npm install -g @anthropic-ai/claude-code`, then run `claude`). Claude Desktop alone is not enough, and not needed.
+
 ## Install
 
 Requires macOS 13+, Xcode command line tools, and **Claude Code (the CLI) logged in once**. The Claude Desktop app is *not* required: this app only reads the credentials Claude Code stores in your keychain.
