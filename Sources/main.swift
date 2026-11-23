@@ -1,4 +1,3 @@
-import SwiftUI
 import AppKit
 
 // MARK: - Localization (en, fr, de, it, ru, es)
@@ -87,23 +86,7 @@ func fetchUsage() async throws -> Usage {
     return Usage(plan: c.plan.capitalized, fiveHour: parseWindow(json["five_hour"]), sevenDay: parseWindow(json["seven_day"]))
 }
 
-// MARK: - State
-
-@MainActor final class Store: ObservableObject {
-    @Published var usage: Usage?
-    @Published var error: UsageError?
-    var onChange: (() -> Void)?
-
-    func refresh() {
-        Task {
-            do { usage = try await fetchUsage(); error = nil }
-            catch { self.error = (error as? UsageError) ?? .network }
-            onChange?()
-        }
-    }
-}
-
-// MARK: - UI
+// MARK: - UI (pure AppKit)
 
 func resetText(_ d: Date?) -> String {
     guard let d else { return "" }
@@ -112,80 +95,97 @@ func resetText(_ d: Date?) -> String {
     return L.resets(h >= 24 ? h / 24 : 0, h >= 24 ? h % 24 : h, m)
 }
 
-struct Bar: View {
-    let percent: Double
-    var color: Color { percent >= 90 ? .red : percent >= 70 ? .orange : .green }
-    var body: some View {
-        GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12))
-                Capsule().fill(color).frame(width: max(6, g.size.width * min(max(percent, 0), 100) / 100))
-            }
-        }.frame(height: 6)
+func label(_ size: CGFloat, _ weight: NSFont.Weight = .regular, color: NSColor = .labelColor) -> NSTextField {
+    let l = NSTextField(labelWithString: "")
+    l.font = .systemFont(ofSize: size, weight: weight)
+    l.textColor = color
+    return l
+}
+
+final class BarView: NSView {
+    var percent: Double = 0 { didSet { needsDisplay = true } }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 6) }
+    override func draw(_ r: NSRect) {
+        let track = NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3)
+        NSColor.labelColor.withAlphaComponent(0.12).setFill(); track.fill()
+        let w = max(6, bounds.width * CGFloat(min(max(percent, 0), 100)) / 100)
+        let color: NSColor = percent >= 90 ? .systemRed : percent >= 70 ? .systemOrange : .systemGreen
+        color.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: w, height: bounds.height), xRadius: 3, yRadius: 3).fill()
     }
 }
 
-struct Row: View {
-    let title: String; let w: Window?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.system(size: 12))
-                Spacer()
-                Text(w == nil ? "–" : "\(Int((w?.percent ?? 0).rounded()))%")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
-            }
-            Bar(percent: w?.percent ?? 0)
-            Text(resetText(w?.resetsAt)).font(.system(size: 10)).foregroundStyle(.secondary)
-        }
+final class RowView: NSStackView {
+    let name = label(12), pct = label(15, .semibold), bar = BarView(), reset = label(10, color: .secondaryLabelColor)
+    init(title: String) {
+        super.init(frame: .zero)
+        orientation = .vertical; alignment = .leading; spacing = 5
+        name.stringValue = title
+        pct.font = .monospacedDigitSystemFont(ofSize: 15, weight: .semibold)
+        let top = NSStackView(views: [name, NSView(), pct])
+        top.orientation = .horizontal; top.alignment = .firstBaseline
+        addArrangedSubview(top); addArrangedSubview(bar); addArrangedSubview(reset)
+        top.widthAnchor.constraint(equalToConstant: 218).isActive = true
+        bar.widthAnchor.constraint(equalToConstant: 218).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    func set(_ w: Window?) {
+        pct.stringValue = w == nil ? "–" : "\(Int(w!.percent.rounded()))%"
+        bar.percent = w?.percent ?? 0
+        reset.stringValue = resetText(w?.resetsAt)
     }
 }
 
-struct ContentView: View {
-    @ObservedObject var store: Store
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Claude").font(.system(size: 13, weight: .semibold))
-                Spacer()
-                if let u = store.usage {
-                    Text(u.plan).font(.system(size: 10, weight: .medium))
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.primary.opacity(0.1)))
-                }
-            }
-            if let u = store.usage {
-                Row(title: L.session, w: u.fiveHour)
-                Row(title: L.week, w: u.sevenDay)
-            } else if store.error == nil {
-                Text(L.loading).font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            if let e = store.error { Text(e.message).font(.system(size: 11)).foregroundStyle(.red) }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .frame(width: 250, alignment: .leading)
+final class PanelView: NSStackView {
+    let plan = label(10, .medium), five = RowView(title: L.session), week = RowView(title: L.week)
+    let status = label(11, color: .secondaryLabelColor)
+    init() {
+        super.init(frame: .zero)
+        orientation = .vertical; alignment = .leading; spacing = 14
+        edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+        let title = label(13, .semibold); title.stringValue = "Claude"
+        let head = NSStackView(views: [title, NSView(), plan])
+        head.orientation = .horizontal
+        status.maximumNumberOfLines = 3
+        status.preferredMaxLayoutWidth = 218
+        status.lineBreakMode = .byWordWrapping
+        for v in [head, five, week, status] { addArrangedSubview(v) }
+        head.widthAnchor.constraint(equalToConstant: 218).isActive = true
+        render(nil, nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    func render(_ u: Usage?, _ e: UsageError?) {
+        plan.stringValue = u?.plan ?? ""
+        plan.isHidden = u == nil
+        five.isHidden = u == nil; week.isHidden = u == nil
+        five.set(u?.fiveHour); week.set(u?.sevenDay)
+        status.stringValue = e?.message ?? (u == nil ? L.loading : "")
+        status.textColor = e == nil ? .secondaryLabelColor : .systemRed
+        status.isHidden = status.stringValue.isEmpty
     }
 }
 
 // MARK: - App
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    let store = Store()
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let menu = NSMenu()
+    let panel = PanelView()
     var timer: Timer?
     var menuOpen = false
+    var lastFetch = Date.distantPast
+    var usage: Usage?
+    var error: UsageError?
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        let host = NSHostingView(rootView: ContentView(store: store))
-        host.frame = NSRect(origin: .zero, size: NSSize(width: 250, height: 190))
         let content = NSMenuItem()
-        content.view = host
+        panel.setFrameSize(panel.fittingSize)
+        content.view = panel
         menu.addItem(content)
         menu.addItem(.separator())
-        let refresh = NSMenuItem(title: L.refresh, action: #selector(refresh), keyEquivalent: "r")
-        refresh.target = self
-        menu.addItem(refresh)
+        let refreshItem = NSMenuItem(title: L.refresh, action: #selector(forceRefresh), keyEquivalent: "r")
+        refreshItem.target = self
+        menu.addItem(refreshItem)
         menu.addItem(NSMenuItem(title: L.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
         item.menu = menu
@@ -194,25 +194,37 @@ struct ContentView: View {
             b.title = "…"
             b.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
         }
-        store.onChange = { [weak self] in self?.update() }
-        store.refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.store.refresh() }
+        refresh()
+        // every 5 minutes, with 30 s tolerance so macOS can coalesce wake-ups
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
+        timer?.tolerance = 30
     }
 
     @objc func mouseEntered(with e: NSEvent) { if !menuOpen { item.button?.performClick(nil) } }
-    @objc func refresh() { store.refresh() }
-    func menuWillOpen(_ m: NSMenu) { menuOpen = true; store.refresh() }
+    @objc func forceRefresh() { refresh() }
+
+    func refresh() {
+        lastFetch = Date()
+        Task {
+            do { usage = try await fetchUsage(); error = nil }
+            catch { self.error = (error as? UsageError) ?? .network }
+            update()
+        }
+    }
+
+    func menuWillOpen(_ m: NSMenu) {
+        menuOpen = true
+        if Date().timeIntervalSince(lastFetch) > 60 { refresh() }
+    }
     func menuDidClose(_ m: NSMenu) { menuOpen = false }
 
     func update() {
-        if let h = menu.items.first?.view {
-            let size = h.fittingSize
-            h.setFrameSize(NSSize(width: 250, height: size.height))
-        }
-        if let p = store.usage?.fiveHour?.percent { item.button?.title = "\(Int(p.rounded()))%" }
-        else { item.button?.title = store.error == nil ? "…" : "!" }
+        panel.render(usage, error)
+        panel.setFrameSize(panel.fittingSize)
+        if let p = usage?.fiveHour?.percent { item.button?.title = "\(Int(p.rounded()))%" }
+        else { item.button?.title = error == nil ? "…" : "!" }
     }
 }
 

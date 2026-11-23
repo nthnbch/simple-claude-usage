@@ -9,8 +9,8 @@ I wanted something simple, safe and personal: no risk, no account to hand over, 
 Languages: English, Français, Deutsch, Italiano, Русский, Español (follows the system language).
 
 - Hover or click the menu bar icon to see details. The menu bar shows the 5h percentage.
-- One Swift file (~170 lines), no dependencies, no Dock icon.
-- Refreshes every 2 minutes.
+- One Swift file (~250 lines), no dependencies, no Dock icon.
+- Refreshes every 5 minutes (and when you open the menu, at most once a minute). Pure AppKit, no SwiftUI, to keep memory and battery use minimal.
 
 ## Prerequisite: Claude Code must be installed
 
