@@ -1,6 +1,32 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Localization (en, fr, de, it, ru, es)
+
+enum L {
+    static let lang: String = {
+        let c = Locale.preferredLanguages.first?.prefix(2).lowercased() ?? "en"
+        return ["fr", "de", "it", "ru", "es"].contains(c) ? c : "en"
+    }()
+    // order: en, fr, de, it, ru, es
+    static func t(_ en: String, _ fr: String, _ de: String, _ it: String, _ ru: String, _ es: String) -> String {
+        switch lang { case "fr": return fr; case "de": return de; case "it": return it; case "ru": return ru; case "es": return es; default: return en }
+    }
+    static var session: String { t("Session · 5h", "Session · 5h", "Sitzung · 5 Std", "Sessione · 5h", "Сессия · 5 ч", "Sesión · 5h") }
+    static var week: String { t("Week · 7d", "Semaine · 7j", "Woche · 7 T", "Settimana · 7g", "Неделя · 7 дн", "Semana · 7d") }
+    static var loading: String { t("Loading…", "Chargement…", "Lädt…", "Caricamento…", "Загрузка…", "Cargando…") }
+    static var refresh: String { t("Refresh", "Actualiser", "Aktualisieren", "Aggiorna", "Обновить", "Actualizar") }
+    static var quit: String { t("Quit", "Quitter", "Beenden", "Esci", "Выйти", "Salir") }
+    static var noCreds: String { t("Not signed in. Log in once with Claude Code.", "Non connecté. Connecte-toi une fois avec Claude Code.", "Nicht angemeldet. Einmal in Claude Code anmelden.", "Non connesso. Accedi una volta con Claude Code.", "Нет входа. Войдите один раз в Claude Code.", "Sin sesión. Inicia sesión una vez con Claude Code.") }
+    static var expired: String { t("Session expired. Use Claude Code once to refresh.", "Session expirée. Utilise Claude Code une fois pour la renouveler.", "Sitzung abgelaufen. Claude Code einmal nutzen.", "Sessione scaduta. Usa Claude Code una volta.", "Сессия истекла. Запустите Claude Code один раз.", "Sesión caducada. Usa Claude Code una vez.") }
+    static var network: String { t("Can't reach Anthropic.", "Impossible de joindre Anthropic.", "Anthropic nicht erreichbar.", "Anthropic non raggiungibile.", "Нет связи с Anthropic.", "No se puede contactar con Anthropic.") }
+    static func resets(_ d: Int, _ h: Int, _ m: Int) -> String {
+        let u = (d: t("d", "j", "T", "g", "д", "d"), h: t("h", "h", "Std", "h", "ч", "h"), m: t("min", "min", "Min", "min", "мин", "min"))
+        let body = d > 0 ? "\(d)\(u.d) \(h)\(u.h)" : h > 0 ? "\(h)\(u.h) \(m)\(u.m)" : "\(m)\(u.m)"
+        return t("resets in ", "remise à zéro dans ", "Reset in ", "reset tra ", "сброс через ", "se reinicia en ") + body
+    }
+}
+
 // MARK: - Model
 
 struct Window { let percent: Double; let resetsAt: Date? }
@@ -10,9 +36,9 @@ enum UsageError: Error {
     case noCredentials, expired, network
     var message: String {
         switch self {
-        case .noCredentials: return "Not signed in. Run Claude Code and log in."
-        case .expired: return "Session expired. Open Claude Code to refresh."
-        case .network: return "Can't reach Anthropic."
+        case .noCredentials: return L.noCreds
+        case .expired: return L.expired
+        case .network: return L.network
         }
     }
 }
@@ -83,8 +109,7 @@ func resetText(_ d: Date?) -> String {
     guard let d else { return "" }
     let s = max(0, Int(d.timeIntervalSinceNow))
     let h = s / 3600, m = (s % 3600) / 60
-    if h >= 24 { return "resets in \(h / 24)d \(h % 24)h" }
-    return h > 0 ? "resets in \(h)h \(m)m" : "resets in \(m)m"
+    return L.resets(h >= 24 ? h / 24 : 0, h >= 24 ? h % 24 : h, m)
 }
 
 struct Bar: View {
@@ -130,10 +155,10 @@ struct ContentView: View {
                 }
             }
             if let u = store.usage {
-                Row(title: "Session · 5h", w: u.fiveHour)
-                Row(title: "Week · 7d", w: u.sevenDay)
+                Row(title: L.session, w: u.fiveHour)
+                Row(title: L.week, w: u.sevenDay)
             } else if store.error == nil {
-                Text("Loading…").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(L.loading).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             if let e = store.error { Text(e.message).font(.system(size: 11)).foregroundStyle(.red) }
         }
@@ -158,10 +183,10 @@ struct ContentView: View {
         content.view = host
         menu.addItem(content)
         menu.addItem(.separator())
-        let refresh = NSMenuItem(title: "Refresh", action: #selector(refresh), keyEquivalent: "r")
+        let refresh = NSMenuItem(title: L.refresh, action: #selector(refresh), keyEquivalent: "r")
         refresh.target = self
         menu.addItem(refresh)
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
         item.menu = menu
 
