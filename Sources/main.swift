@@ -228,6 +228,29 @@ final class PanelView: NSStackView {
     }
 }
 
+#if SNAPSHOT
+// Renders the panel with sample data to a PNG (used for the README screenshot).
+MainActor.assumeIsolated {
+    _ = NSApplication.shared
+    let panel = PanelView()
+    let soon = Date().addingTimeInterval(2 * 3600 + 14 * 60), later = Date().addingTimeInterval(3 * 86400 + 5 * 3600)
+    panel.render(Usage(plan: "Max", fiveHour: Window(percent: 42, resetsAt: soon), sevenDay: Window(percent: 18, resetsAt: later)), nil)
+    panel.setFrameSize(panel.fittingSize)
+    let pad: CGFloat = 20, size = NSSize(width: panel.frame.width + pad * 2, height: panel.frame.height + pad * 2)
+    let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+    let bg = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
+    bg.material = .menu; bg.state = .active
+    panel.setFrameOrigin(NSPoint(x: pad, y: pad))
+    bg.addSubview(panel)
+    win.contentView = bg
+    win.appearance = NSAppearance(named: .darkAqua)
+    win.orderFront(nil)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+    let rep = bg.bitmapImageRepForCachingDisplay(in: bg.bounds)!
+    bg.cacheDisplay(in: bg.bounds, to: rep)
+    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))
+}
+#else
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
@@ -235,3 +258,4 @@ MainActor.assumeIsolated {
     app.delegate = delegate
     app.run()
 }
+#endif

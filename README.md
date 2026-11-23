@@ -2,6 +2,8 @@
 
 A tiny macOS menu bar app that shows your Claude subscription usage: plan, 5-hour session %, and weekly %.
 
+<p align="center"><img src="docs/screenshot.png" alt="Menu screenshot" width="290"></p>
+
 ## Why
 
 I wanted something simple, safe and personal: no risk, no account to hand over, no need to open the official Claude app just to check how much I have left. One glance at the menu bar, that's all.
