@@ -2,7 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 APP="build/ClaudeUsage.app"
-rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS"
+rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 swiftc -O -o "$APP/Contents/MacOS/ClaudeUsage" Sources/main.swift
 cat > "$APP/Contents/Info.plist" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
@@ -11,6 +12,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>CFBundleName</key><string>ClaudeUsage</string>
 <key>CFBundleIdentifier</key><string>com.simple.claude-usage</string>
 <key>CFBundleExecutable</key><string>ClaudeUsage</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>LSUIElement</key><true/>

@@ -4,6 +4,10 @@ A tiny macOS menu bar app that shows your Claude subscription usage: plan, 5-hou
 
 <p align="center"><img src="docs/screenshot.png" alt="Menu screenshot" width="290"></p>
 
+## Download
+
+**[⬇️ Download the latest .dmg](https://github.com/nthnbch/simple-claude-usage/releases/latest)** → open it, drag *Claude Usage* onto *Applications*, launch it. (First launch: right-click > Open, the app is not notarized.)
+
 ## Why
 
 I wanted something simple, safe and personal: no risk, no account to hand over, no need to open the official Claude app just to check how much I have left. One glance at the menu bar, that's all.
@@ -18,7 +22,7 @@ Languages: English, Français, Deutsch, Italiano, Русский, Español (foll
 
 This app has no login of its own. It reuses the session of **Claude Code** (the `claude` command-line tool), so Claude Code must be installed and logged in at least once (`npm install -g @anthropic-ai/claude-code`, then run `claude`). Claude Desktop alone is not enough, and not needed.
 
-## Install
+## Build from source
 
 Requires macOS 13+, Xcode command line tools, and **Claude Code (the CLI) logged in once**. The Claude Desktop app is *not* required: this app only reads the credentials Claude Code stores in your keychain.
 
@@ -29,7 +33,7 @@ cd simple-claude-usage
 open build/ClaudeUsage.app
 ```
 
-To keep it permanently, move it to `/Applications` and add it to Login Items.
+To make a .dmg: `./make-dmg.sh`. To keep it permanently, move it to `/Applications` and add it to Login Items.
 
 ## Safety
 
